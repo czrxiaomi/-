@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>我的音乐</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/pocketbase@0.21.5/dist/pocketbase.umd.min.js"></script>
+<style>
+/* ============ Liquid Glass 工具类体系（映射 SwiftUI glassEffect） ============ */
+/* .lg        = glassEffect() 基础毛玻璃
+   .lg-strong = 更强模糊/饱和度
+   .lg-tint   = 叠加 soft-light 着色（映射 tint()）
+   .lg-interactive = hover 增强饱和度/亮度（映射 interactive()）
+   .lg-container   = 相邻玻璃融合上下文（映射 GlassEffectContainer）
+   .lg-materialize= 材质淡入过渡（映射 glassEffectTransition(.materialize)） */
+:root{
+  --bg:#ffffff; --sidebar-bg:#f5f5f7; --card-bg:#f5f5f7; --card-hover:#ececef;
+  --text:#1c1c1e; --text-2:#6e6e73; --accent:#0a84ff; --accent-2:#0040a0;
+  --danger:#ff3b30; --glass-border:rgba(255,255,255,.55); --glass-highlight:rgba(255,255,255,.4);
+  --shadow:0 8px 30px rgba(0,0,0,.08);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg);color:var(--text);overflow:hidden;
+}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input{font-family:inherit;outline:none}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:rgba(0,0,0,.18);border-radius:4px}
+
+/* ---------- Liquid Glass 基础 ---------- */
+.lg{position:relative;background:rgba(255,255,255,.42);backdrop-filter:blur(24px) saturate(1.8);-webkit-backdrop-filter:blur(24px) saturate(1.8);border:1px solid var(--glass-border);box-shadow:inset 0 1px 0 var(--glass-highlight),0 4px 20px rgba(0,0,0,.06);border-radius:16px}
+.lg-strong{background:rgba(255,255,255,.55);backdrop-filter:blur(34px) saturate(2);-webkit-backdrop-filter:blur(34px) saturate(2)}
+.lg-tint{position:relative}
+.lg-tint::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(10,132,255,.10),rgba(0,64,160,.10));mix-blend-mode:soft-light;pointer-events:none}
+.lg-interactive{transition:filter .25s ease,transform .25s ease,box-shadow .25s ease}
+.lg-interactive:hover{filter:brightness(1.04) saturate(2);box-shadow:inset 0 1px 0 var(--glass-highlight),0 6px 24px rgba(10,132,255,.18)}
+.lg-container{display:flex;gap:0}
+.lg-materialize{animation:lgMat .55s cubic-bezier(.32,1.05,.42,1) both}
+@keyframes lgMat{0%{opacity:0;filter:blur(12px) saturate(.6);transform:scale(.96)}100%{opacity:1;filter:blur(0) saturate(1);transform:scale(1)}}
+
+/* ---------- 登录页 ---------- */
+#login-wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(1200px 600px at 50% 18%,rgba(10,132,255,.10),transparent 60%),#fff;z-index:50;padding:20px}
+.login-card{max-width:420px;width:100%;padding:36px 32px;border-radius:24px}
+.login-card h1{font-size:26px;font-weight:700;margin-bottom:6px;letter-spacing:-.02em}
+.login-card p.sub{color:var(--text-2);font-size:13px;margin-bottom:22px}
+.login-card label{display:block;font-size:13px;font-weight:600;margin:12px 0 6px;color:var(--text-2)}
+.input-wrap{position:relative}
+.input-wrap input{width:100%;height:44px;padding:0 40px 0 14px;border-radius:12px;border:1px solid rgba(0,0,0,.12);background:rgba(255,255,255,.7);font-size:15px;transition:border-color .2s}
+.input-wrap input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(10,132,255,.18)}
+.input-wrap .toggle-pwd{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--text-2);font-size:14px}
+.input-wrap .toggle-pwd:hover{background:rgba(0,0,0,.06);color:var(--text)}
+.login-card .btn-primary{width:100%;height:46px;border-radius:14px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;font-size:16px;font-weight:600;margin-top:20px;box-shadow:0 6px 18px rgba(10,132,255,.35)}
+.login-card .btn-primary:hover{filter:brightness(1.06)}
+.login-tip{margin-top:14px;font-size:12px;color:var(--text-2);text-align:center;line-height:1.6}
+.login-tip i{color:var(--accent)}
+.login-err{color:var(--danger);font-size:13px;margin-top:10px;min-height:18px;text-align:center}
+
+/* ---------- 主布局 ---------- */
+#app{display:none;height:100vh}
+.sidebar{width:232px;background:var(--sidebar-bg);border-right:1px solid rgba(0,0,0,.06);display:flex;flex-direction:column;padding:18px 12px;gap:2px;flex-shrink:0}
+.sidebar .brand{font-size:17px;font-weight:700;padding:6px 10px 14px;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+.sidebar .brand i{color:var(--accent)}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;font-size:14px;color:var(--text);cursor:pointer;transition:background .15s}
+.nav-item:hover{background:rgba(0,0,0,.05)}
+.nav-item.active{background:rgba(10,132,255,.12);color:var(--accent);font-weight:600}
+.nav-item i{width:20px;text-align:center;font-size:15px}
+.sidebar .spacer{flex:1}
+.user-card{display:flex;align-items:center;gap:10px;padding:10px;border-radius:14px;cursor:pointer;transition:background .15s}
+.user-card:hover{background:rgba(0,0,0,.05)}
+.avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;flex-shrink:0;box-shadow:0 2px 8px rgba(10,132,255,.3)}
+.user-card .uname{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-card .uid{font-size:11px;color:var(--text-2)}
+
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.topbar{height:56px;display:flex;align-items:center;padding:0 22px;gap:16px;border-bottom:1px solid rgba(0,0,0,.06);background:rgba(255,255,255,.85);backdrop-filter:blur(16px);position:relative}
+.topbar .page-title{font-size:20px;font-weight:700;letter-spacing:-.02em}
+/* 分段控制器（居中） */
+.seg-wrap{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center}
+.segmented{position:relative;display:flex;background:rgba(240,240,242,.9);border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:3px;gap:0;backdrop-filter:blur(12px)}
+.seg-btn{padding:6px 16px;font-size:13px;font-weight:600;color:var(--text-2);border-radius:9px;position:relative;z-index:2;transition:color .3s cubic-bezier(.32,1.05,.42,1);white-space:nowrap}
+.seg-btn.active{color:var(--text)}
+.seg-glider{position:absolute;top:3px;bottom:3px;background:rgba(255,255,255,.92);border-radius:9px;box-shadow:0 1px 4px rgba(0,0,0,.12),inset 0 1px 0 rgba(255,255,255,.6);backdrop-filter:blur(10px) saturate(1.6);transition:transform .45s cubic-bezier(.32,1.05,.42,1),width .45s cubic-bezier(.32,1.05,.42,1);z-index:1}
+/* 搜索框（右移到底） */
+.search-box{margin-left:auto;position:relative;width:240px}
+.search-box input{width:100%;height:36px;padding:0 14px 0 36px;border-radius:10px;border:1px solid rgba(0,0,0,.1);background:rgba(245,245,247,.9);font-size:13px}
+.search-box i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-2);font-size:13px}
+.content{flex:1;overflow-y:auto;padding:24px 28px 110px}
+.page{display:none;animation:pg .4s ease both}
+.page.active{display:block}
+@keyframes pg{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ---------- 主页 ---------- */
+.banner{position:relative;border-radius:20px;padding:26px;color:#fff;background:linear-gradient(135deg,#ff3b30,#ff9500);overflow:hidden;margin-bottom:26px;box-shadow:0 12px 30px rgba(255,59,48,.25)}
+.banner::after{content:"♫";position:absolute;right:-10px;bottom:-30px;font-size:140px;opacity:.18}
+.banner h2{font-size:22px;font-weight:700;margin-bottom:6px;position:relative;z-index:1}
+.banner p{font-size:13px;opacity:.95;position:relative;z-index:1}
+.section-title{font-size:17px;font-weight:700;margin:8px 0 14px;letter-spacing:-.01em}
+.cat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px}
+.cat-card{padding:16px;border-radius:16px;color:#fff;font-weight:700;font-size:15px;cursor:pointer;transition:transform .2s,box-shadow .2s;box-shadow:0 4px 14px rgba(0,0,0,.08)}
+.cat-card:hover{transform:translateY(-3px);box-shadow:0 8px 20px rgba(0,0,0,.14)}
+.cat-card i{display:block;font-size:22px;margin-bottom:8px}
+.rec-row{display:flex;gap:14px;overflow-x:auto;padding-bottom:8px;margin-bottom:26px;scroll-snap-type:x mandatory}
+.rec-card{flex:0 0 160px;background:var(--card-bg);border-radius:16px;padding:12px;cursor:pointer;transition:background .15s,transform .2s;scroll-snap-align:start}
+.rec-card:hover{background:var(--card-hover);transform:translateY(-2px)}
+.rec-cover{width:100%;aspect-ratio:1;border-radius:12px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;font-size:34px;color:#fff}
+.rec-card .rt{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec-card .ra{font-size:11px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.song-list{display:flex;flex-direction:column;gap:4px}
+.song-row{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:12px;cursor:pointer;transition:background .15s}
+.song-row:hover{background:var(--card-bg)}
+.song-row .sc{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;color:#fff;flex-shrink:0}
+.song-row .si{flex:1;min-width:0}
+.song-row .st{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.song-row .sa{font-size:12px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.song-row .sact{display:flex;align-items:center;gap:6px;color:var(--text-2);font-size:13px}
+.song-row .sact i{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:8px}
+.song-row .sact i:hover{background:rgba(0,0,0,.06);color:var(--text)}
+.empty{text-align:center;padding:60px 20px;color:var(--text-2)}
+.empty i{font-size:44px;margin-bottom:12px;opacity:.4}
+.empty p{font-size:14px}
+.empty .ebtn{margin-top:14px;padding:8px 20px;border-radius:10px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;display:inline-block;cursor:pointer}
+
+/* ---------- 播放器 ---------- */
+.player{position:fixed;left:0;right:0;bottom:0;height:72px;display:none;align-items:center;padding:0 20px;gap:16px;background:rgba(245,245,247,.85);backdrop-filter:blur(24px) saturate(1.8);border-top:1px solid rgba(0,0,0,.08);z-index:30}
+.player.show{display:flex;animation:plyIn .35s cubic-bezier(.32,1.05,.42,1) both}
+@keyframes plyIn{from{transform:translateY(20px);opacity:0}to{transform:none;opacity:1}}
+.pc-cover{width:50px;height:50px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff;flex-shrink:0;cursor:pointer}
+.pc-info{flex:1;min-width:0}
+.pc-info .pi-t{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc-info .pi-a{font-size:12px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.pc-ctrl{display:flex;align-items:center;gap:14px}
+.pc-ctrl i{font-size:18px;color:var(--text);width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:10px;cursor:pointer;transition:background .15s}
+.pc-ctrl i:hover{background:rgba(0,0,0,.06)}
+.pc-prog{flex:2;display:flex;align-items:center;gap:10px;max-width:420px}
+.pc-prog span{font-size:11px;color:var(--text-2);font-variant-numeric:tabular-nums;min-width:34px;text-align:center}
+.pc-prog input[type=range]{flex:1;-webkit-appearance:none;height:4px;border-radius:2px;background:rgba(0,0,0,.15);outline:none}
+.pc-prog input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.pc-vol{display:flex;align-items:center;gap:6px;color:var(--text-2)}
+.pc-vol input[type=range]{width:90px;-webkit-appearance:none;height:4px;border-radius:2px;background:rgba(0,0,0,.15);outline:none}
+.pc-vol input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent);cursor:pointer}
+
+/* 全屏播放页 */
+#full-player{position:fixed;inset:0;z-index:40;display:none;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(160deg,#1c1c1e,#0a0a0c);color:#fff;padding:30px}
+#full-player.show{display:flex;animation:fp .4s ease both}
+@keyframes fp{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:none}}
+#full-player .fp-close{position:absolute;top:22px;right:26px;font-size:22px;color:rgba(255,255,255,.7);width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:12px}
+#full-player .fp-close:hover{background:rgba(255,255,255,.1);color:#fff}
+.fp-cover{width:300px;height:300px;border-radius:28px;display:flex;align-items:center;justify-content:center;font-size:120px;box-shadow:0 20px 60px rgba(0,0,0,.5);margin-bottom:26px;animation:spin 24s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.fp-title{font-size:24px;font-weight:700;text-align:center;max-width:90vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fp-artist{font-size:15px;color:rgba(255,255,255,.7);margin-top:6px;text-align:center}
+.fp-prog{width:420px;max-width:90vw;margin:22px 0 6px;display:flex;align-items:center;gap:10px}
+.fp-prog input[type=range]{flex:1;-webkit-appearance:none;height:5px;border-radius:3px;background:rgba(255,255,255,.25);outline:none}
+.fp-prog input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#fff;cursor:pointer}
+.fp-prog span{font-size:12px;color:rgba(255,255,255,.6);font-variant-numeric:tabular-nums;min-width:40px;text-align:center}
+.fp-ctrl{display:flex;align-items:center;gap:30px;margin-top:14px}
+.fp-ctrl i{font-size:22px;color:rgba(255,255,255,.85);width:52px;height:52px;display:flex;align-items:center;justify-content:center;border-radius:16px;cursor:pointer;transition:background .15s}
+.fp-ctrl i:hover{background:rgba(255,255,255,.1)}
+.fp-ctrl .fp-play{font-size:30px;background:rgba(255,255,255,.14)}
+.fp-like{position:absolute;top:22px;left:26px;font-size:20px;color:rgba(255,255,255,.7);width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:12px;cursor:pointer}
+.fp-like:hover{background:rgba(255,255,255,.1);color:#fff}
+.fp-like.on{color:var(--danger)}
+
+/* ---------- 账户弹窗 ---------- */
+.modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.35);backdrop-filter:blur(6px);z-index:60;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-mask.show{display:flex;animation:msk .25s ease both}
+@keyframes msk{from{opacity:0}to{opacity:1}}
+.account-card{width:100%;max-width:440px;padding:28px;border-radius:22px}
+.account-card h2{font-size:20px;font-weight:700;margin-bottom:18px}
+.acc-row{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+.acc-row .avatar{width:56px;height:56px;font-size:22px}
+.acc-fields{display:flex;flex-direction:column;gap:12px}
+.acc-fields label{font-size:12px;font-weight:600;color:var(--text-2);display:block;margin-bottom:4px}
+.acc-fields input{width:100%;height:40px;padding:0 12px;border-radius:10px;border:1px solid rgba(0,0,0,.12);background:rgba(255,255,255,.8);font-size:14px}
+.acc-fields input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(10,132,255,.18)}
+.acc-tip{font-size:11px;color:var(--text-2);line-height:1.6;background:rgba(10,132,255,.06);padding:10px 12px;border-radius:10px;margin-top:4px}
+.acc-tip b{color:var(--accent)}
+.acc-actions{display:flex;gap:10px;margin-top:18px}
+.acc-actions .btn-done{flex:1;height:44px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;font-size:15px;font-weight:600}
+.acc-actions .btn-done:hover{filter:brightness(1.06)}
+.acc-actions .btn-out{height:44px;padding:0 16px;border-radius:12px;background:rgba(255,59,48,.08);color:var(--danger);font-size:14px;font-weight:600}
+.acc-actions .btn-out:hover{background:rgba(255,59,48,.16)}
+
+/* ---------- Toast ---------- */
+#toast{position:fixed;top:24px;left:50%;transform:translateX(-50%) translateY(-20px);z-index:80;padding:10px 20px;border-radius:12px;font-size:14px;font-weight:600;color:var(--text);opacity:0;pointer-events:none;transition:opacity .3s,transform .3s;white-space:nowrap}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.ok{background:rgba(48,209,88,.92);color:#fff}
+#toast.err{background:rgba(255,59,48,.92);color:#fff}
+#toast.info{background:rgba(255,255,255,.92);box-shadow:var(--shadow)}
+
+/* 歌手/专辑网格 */
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.grid-card{background:var(--card-bg);border-radius:16px;padding:16px;cursor:pointer;transition:background .15s,transform .2s;text-align:center}
+.grid-card:hover{background:var(--card-hover);transform:translateY(-2px)}
+.grid-card .gc-cover{width:100%;aspect-ratio:1;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:40px;color:#fff;margin-bottom:10px}
+.grid-card .gc-t{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grid-card .gc-s{font-size:12px;color:var(--text-2);margin-top:2px}
+@media(max-width:900px){
+  .sidebar{width:64px;padding:14px 8px}.sidebar .brand span,.nav-item span,.user-card .uname,.user-card .uid{display:none}
+  .cat-grid{grid-template-columns:repeat(2,1fr)}.grid-3{grid-template-columns:repeat(2,1fr)}
+  .search-box{width:170px}.seg-wrap{position:static;transform:none;margin:0 auto}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ 登录页 ============ -->
+<div id="login-wrap">
+  <div class="login-card lg lg-tint lg-interactive lg-materialize">
+    <h1>欢迎来到我的音乐</h1>
+    <p class="sub">登录只为记录你的播放数据 · 支持 iCloud 钥匙串跨设备自动填充</p>
+    <form id="login-form" autocomplete="on">
+      <label for="lg-phone">手机号</label>
+      <div class="input-wrap">
+        <input id="lg-phone" type="tel" inputmode="numeric" autocomplete="username" placeholder="请输入手机号" required>
+      </div>
+      <label for="lg-pwd">密码</label>
+      <div class="input-wrap">
+        <input id="lg-pwd" type="password" autocomplete="current-password" placeholder="请输入密码" required>
+        <button type="button" class="toggle-pwd" id="toggle-pwd" title="显示/隐藏密码"><i class="fa-regular fa-eye"></i></button>
+      </div>
+      <div class="login-err" id="login-err"></div>
+      <button type="submit" class="btn-primary">登 录</button>
+    </form>
+    <p class="login-tip"><i class="fa-solid fa-key"></i> Safari 会自动将密码保存到 <b>iCloud 钥匙串</b>，在同 Apple ID 的其他设备自动填充，无需重复输入。</p>
+  </div>
+</div>
+
+<!-- ============ 主应用 ============ -->
+<div id="app">
+  <aside class="sidebar">
+    <div class="brand"><i class="fa-solid fa-music"></i><span>我的音乐</span></div>
+    <div class="nav-item active" data-page="home"><i class="fa-solid fa-house"></i><span>主页</span></div>
+    <div class="nav-item" data-page="search"><i class="fa-solid fa-magnifying-glass"></i><span>搜索</span></div>
+    <div class="nav-item" data-page="songs"><i class="fa-solid fa-music"></i><span>歌曲</span></div>
+    <div class="nav-item" data-page="recent"><i class="fa-solid fa-clock-rotate-left"></i><span>最近播放</span></div>
+    <div class="nav-item" data-page="favorites"><i class="fa-solid fa-heart"></i><span>我的收藏</span></div>
+    <div class="spacer"></div>
+    <div class="user-card" id="user-card">
+      <div class="avatar" id="side-avatar">陈</div>
+      <div style="min-width:0">
+        <div class="uname" id="side-uname">陈梓睿</div>
+        <div class="uid" id="side-uid">点击管理账户</div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="page-title" id="page-title">主页</div>
+      <div class="seg-wrap">
+        <div class="segmented" id="segmented">
+          <div class="seg-glider" id="seg-glider"></div>
+          <div class="seg-btn active" data-seg="0">全部</div>
+          <div class="seg-btn" data-seg="1">歌曲</div>
+          <div class="seg-btn" data-seg="2">歌手</div>
+          <div class="seg-btn" data-seg="3">专辑</div>
+        </div>
+      </div>
+      <div class="search-box">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input id="top-search" type="search" placeholder="搜索歌曲、歌手、专辑…" autocomplete="off">
+      </div>
+    </div>
+    <div class="content" id="content"><!-- 页面由 JS 渲染 --></div>
+  </div>
+</div>
+
+<!-- 底部播放器（有歌曲时由 JS 添加 .show 显示） -->
+<div class="player lg lg-container" id="player">
+  <div class="pc-cover" id="pc-cover" style="background:linear-gradient(135deg,#0a84ff,#0040a0)"><i class="fa-solid fa-music"></i></div>
+  <div class="pc-info">
+    <div class="pi-t" id="pc-t">未播放</div>
+    <div class="pi-a" id="pc-a">—</div>
+  </div>
+  <div class="pc-ctrl">
+    <i class="fa-solid fa-backward-step" id="pc-prev" title="上一首"></i>
+    <i class="fa-solid fa-play" id="pc-play" title="播放/暂停"></i>
+    <i class="fa-solid fa-forward-step" id="pc-next" title="下一首"></i>
+  </div>
+  <div class="pc-prog">
+    <span id="pc-cur">0:00</span>
+    <input id="pc-bar" type="range" min="0" max="1000" value="0">
+    <span id="pc-dur">0:00</span>
+  </div>
+  <div class="pc-vol"><i class="fa-solid fa-volume-high"></i><input id="pc-vol" type="range" min="0" max="100" value="80"></div>
+</div>
+
+<!-- 全屏播放页 -->
+<div id="full-player">
+  <div class="fp-like" id="fp-like" title="收藏"><i class="fa-regular fa-heart"></i></div>
+  <div class="fp-close" id="fp-close" title="关闭"><i class="fa-solid fa-xmark"></i></div>
+  <div class="fp-cover" id="fp-cover" style="background:linear-gradient(135deg,#0a84ff,#0040a0)"><i class="fa-solid fa-music"></i></div>
+  <div class="fp-title" id="fp-t">—</div>
+  <div class="fp-artist" id="fp-a">—</div>
+  <div class="fp-prog"><span id="fp-cur">0:00</span><input id="fp-bar" type="range" min="0" max="1000" value="0"><span id="fp-dur">0:00</span></div>
+  <div class="fp-ctrl">
+    <i class="fa-solid fa-backward-step" id="fp-prev"></i>
+    <i class="fa-solid fa-play fp-play" id="fp-play"></i>
+    <i class="fa-solid fa-forward-step" id="fp-next"></i>
+  </div>
+</div>
+
+<!-- 账户弹窗 -->
+<div class="modal-mask" id="account-modal">
+  <div class="account-card lg lg-strong lg-tint lg-materialize">
+    <h2>账户</h2>
+    <div class="acc-row">
+      <div class="avatar" id="acc-avatar">陈</div>
+      <div>
+        <div style="font-size:15px;font-weight:700" id="acc-name">陈梓睿</div>
+        <div style="font-size:12px;color:var(--text-2)" id="acc-phone">—</div>
+      </div>
+    </div>
+    <div class="acc-fields">
+      <div><label>昵称</label><input id="acc-name-in" type="text" placeholder="请输入昵称" autocomplete="nickname"></div>
+      <div><label>手机号</label><input id="acc-phone-in" type="tel" placeholder="11 位手机号" autocomplete="username"></div>
+      <div><label>云端同步 URL（自托管 PocketBase，跨设备共享播放记录/收藏）</label><input id="acc-pb" type="url" placeholder="https://pb.你的域名.com"></div>
+      <div class="acc-tip"><b>提示：</b>登录凭据由 <b>iCloud 钥匙串</b> 自动保存与跨设备填充，无需在此配置。填写自托管 PocketBase 地址可让播放记录/收藏在设备间同步（iCloud 无法同步这类应用数据）。</div>
+    </div>
+    <div class="acc-actions">
+      <button class="btn-out" id="acc-logout">退出登录</button>
+      <button class="btn-done" id="acc-done">完成</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ============ 配置 ============
+   - 登录凭据：交给 Safari/iCloud Keychain 自动保存与跨设备填充（标准 password 表单）
+   - 应用数据跨设备同步：可选自托管 PocketBase（plays/favorites 集合）
+     若不配置 PB URL，则走 LocalStorage 单机模式（播放/收藏/改名本机正常）
+   - 搜索/封面：TheAudioDB（无需 Key，CORS 已启用）为首选真实数据源
+*/
+const CONFIG = {
+  PB_URL: localStorage.getItem('mm_pb_url') || '',
+  DEFAULT_PB_URL: '',
+  APP_NAME: '我的音乐'
+};
+const PB = (window.PocketBase && CONFIG.PB_URL) ? new PocketBase(CONFIG.PB_URL) : null;
+
+/* ---------- 工具 ---------- */
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+function toast(msg, type='info', ms=2200){
+  const t=$('#toast');t.className='';t.textContent=msg;
+  requestAnimationFrame(()=>{t.classList.add('show',type||'info');setTimeout(()=>t.classList.remove('show'),ms)});
+}
+function fmt(s){if(!isFinite(s))return'0:00';s=Math.floor(s);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
+function avatarText(name){return (name||'我').trim().charAt(0).toUpperCase()}
+function rand(a,b){return a+Math.floor(Math.random()*(b-a+1))}
+const CAT_GRADIENTS=['#ff3b30','#ff9500','#ffcc00','#34c759','#007aff','#5856d6','#af52de','#ff2d55'];
+
+/* ---------- 本地兜底曲库（网络/API 异常时保证始终可播放） ---------- */
+const LOCAL_SONGS = [
+  {id:'s1',title:'夏天的风',artist:'Umaii',album:'夏日精选',cover:'🌊',url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'},
+  {id:'s2',title:'夜空中最亮的星',artist:'逃跑计划',album:'世界',cover:'🌟',url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3'},
+  {id:'s3',title:'起风了',artist:'买辣椒也用券',album:'起风了',cover:'🍃',url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3'},
+  {id:'s4',title:'晴天',artist:'周杰伦',album:'叶惠美',cover:'☀️',url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3'},
+  {id:'s5',title:'稻香',artist:'周杰伦',album:'魔杰座',cover:'🌾',url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3'},
+  {id:'s6',title:'光年之外',artist:'G.E.M.',album:'新的心跳',cover:'🚀',url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3'},
+  {id:'s7',title:'Shape of You',artist:'Ed Sheeran',album:'÷',cover:'🎸',url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3'},
+  {id:'s8',title:'Blinding Lights',artist:'The Weeknd',album:'After Hours',cover:'🌃',url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3'},
+  {id:'s9',title:'Dance Monkey',artist:'Tones and I',album:'The Kids Are Coming',cover:'🐵',url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3'},
+  {id:'s10',title:'Bohemian Rhapsody',artist:'Queen',album:'A Night at the Opera',cover:'👑',url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3'},
+  {id:'s11',title:'小幸运',artist:'田馥甄',album:'我的少女时代',cover:'🍀',url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-11.mp3'},
+  {id:'s12',title:'River Flows in You',artist:'Yiruma',album:'First Love',cover:'🎹',url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3'},
+];
+
+/* ---------- 状态 ---------- */
+const State = {
+  user:null,        // {phone,name}
+  pbMode:false,     // 是否已连上 PocketBase
+  songs:[],
+  current:null,
+  playing:false,
+  recent:JSON.parse(localStorage.getItem('mm_recent')||'[]'),
+  favs:JSON.parse(localStorage.getItem('mm_favs')||'[]'),
+  seg:0,            // 0全部1歌曲2歌手3专辑
+};
+
+/* ---------- PocketBase 辅助（仅应用数据：plays/favorites） ---------- */
+async function pbEnsureUser(){
+  if(!PB) return null;
+  try{
+    const list = await PB.collection('users').getFullList({filter:`phone="${State.user.phone}"`,$autoCancel:false});
+    if(list.length) return list[0];
+    return await PB.collection('users').create({phone:State.user.phone, password:State.user.phone, name:State.user.name});
+  }catch(e){return null}
+}
+async function pbAddPlay(song){
+  if(!PB || !State.pbMode || !State.user) return;
+  try{await PB.collection('plays').create({userId:State.user.phone,songId:song.id,title:song.title,artist:song.artist,album:song.album||'',cover:song.cover||'',url:song.url||''});}catch(e){}
+}
+async function pbAddFav(song){
+  if(!PB || !State.pbMode || !State.user) return;
+  try{await PB.collection('favorites').create({userId:State.user.phone,songId:song.id,title:song.title,artist:song.artist,cover:song.cover||'',url:song.url||''});}catch(e){}
+}
+async function pbDelFav(songId){
+  if(!PB || !State.pbMode || !State.user) return;
+  try{const r=await PB.collection('favorites').getFullList({filter:`userId="${State.user.phone}" && songId="${songId}"`,$autoCancel:false});if(r[0])await PB.collection('favorites').delete(r[0].id);}catch(e){}
+}
+async function pbLoadFavs(){if(!PB||!State.pbMode||!State.user)return;try{const r=await PB.collection('favorites').getFullList({filter:`userId="${State.user.phone}"`,$autoCancel:false});State.favs=r.map(x=>({id:x.songId,title:x.title,artist:x.artist,cover:x.cover,url:x.url}));localStorage.setItem('mm_favs',JSON.stringify(State.favs));}catch(e){}}
+async function probePb(){
+  if(!PB) return false;
+  try{await PB.health.check();State.pbMode=true;return true;}catch(e){State.pbMode=false;return false}
+}
+
+/* ---------- 认证（登录凭据由 iCloud Keychain 自动保存/填充） ---------- */
+function getUsers(){return JSON.parse(localStorage.getItem('mm_users')||'{}')}
+function saveUsers(u){localStorage.setItem('mm_users',JSON.stringify(u))}
+function login(phone,name){
+  State.user={phone,name:name||phone};
+  localStorage.setItem('mm_user',JSON.stringify(State.user));
+  $('#login-wrap').style.display='none';$('#app').style.display='flex';
+  refreshUserCard();
+  if(State.current) $('#player').classList.add('show');
+  probePb().then(on=>toast(on?'☁️ 云端同步已启用':'💾 本地模式（播放记录/收藏仅本机）',on?'ok':'info',2600));
+  pbEnsureUser();pbLoadFavs();Router.go('home');
+}
+function logout(){
+  State.user=null;
+  localStorage.removeItem('mm_user');
+  // 同时清掉本地账户表/pb_url，让登录页真正可重新出现
+  localStorage.removeItem('mm_users');
+  localStorage.removeItem('mm_pb_url');
+  CONFIG.PB_URL='';
+  $('#app').style.display='none';
+  $('#login-wrap').style.display='flex';
+  // 重置表单，避免自动填充误导
+  $('#lg-phone').value='';$('#lg-pwd').value='';
+  $('#login-err').textContent='';
+}
+function tryAutoLogin(){const u=localStorage.getItem('mm_user');if(u){try{State.user=JSON.parse(u);$('#login-wrap').style.display='none';$('#app').style.display='flex';refreshUserCard();probePb().then(on=>on&&pbLoadFavs());Router.go('home');}catch(e){}}}
+
+/* ---------- 用户卡片 / 账户弹窗 ---------- */
+function refreshUserCard(){
+  const n=State.user?State.user.name:'陈梓睿';
+  const p=State.user?State.user.phone:'';
+  $('#side-avatar').textContent=avatarText(n);
+  $('#side-uname').textContent=n;
+  $('#side-uid').textContent=p||'点击管理账户';
+}
+function openAccount(){
+  const n=State.user?State.user.name:'陈梓睿',p=State.user?State.user.phone:'';
+  $('#acc-avatar').textContent=avatarText(n);
+  $('#acc-name').textContent=n;$('#acc-phone').textContent=p;
+  $('#acc-name-in').value=n;$('#acc-phone-in').value=p;
+  $('#acc-pb').value=CONFIG.PB_URL;
+  $('#account-modal').classList.add('show');
+}
+function closeAccount(){$('#account-modal').classList.remove('show');Router.render();}
+$('#user-card').addEventListener('click',openAccount);
+$('#account-modal').addEventListener('click',e=>{if(e.target===$('#account-modal'))closeAccount()});
+$('#acc-done').addEventListener('click',()=>{
+  const name=$('#acc-name-in').value.trim()||'我';
+  const phone=$('#acc-phone-in').value.trim();
+  if(phone && !/^1\d{10}$/.test(phone)){toast('请输入有效的 11 位手机号','err');return}
+  if(State.user){if(phone)State.user.phone=phone;State.user.name=name;}
+  else State.user={phone:phone||'guest',name};
+  localStorage.setItem('mm_user',JSON.stringify(State.user));
+  const pbv=$('#acc-pb').value.trim();CONFIG.PB_URL=pbv;localStorage.setItem('mm_pb_url',pbv);
+  refreshUserCard();
+  closeAccount();
+  toast('已保存','ok');
+  if(pbv){probePb().then(on=>{if(on){pbEnsureUser();pbLoadFavs();toast('☁️ 云端同步已启用','ok')}else toast('PB 地址不可达，仍为本地模式','err')})}
+});
+$('#acc-logout').addEventListener('click',()=>{if(!confirm('确定要退出登录吗？'))return;closeAccount();logout();toast('已退出登录','info')});
+
+/* ---------- 登录表单（iCloud Keychain 会自动保存/填充密码） ---------- */
+$('#toggle-pwd').addEventListener('click',()=>{
+  const i=$('#lg-pwd'),b=$('#toggle-pwd i');
+  if(i.type==='password'){i.type='text';b.className='fa-regular fa-eye-slash'}else{i.type='password';b.className='fa-regular fa-eye'}
+});
+$('#login-form').addEventListener('submit',e=>{
+  e.preventDefault();
+  const phone=$('#lg-phone').value.trim(),pwd=$('#lg-pwd').value;
+  $('#login-err').textContent='';
+  if(!/^1\d{10}$/.test(phone)){toast('请输入有效的 11 位手机号','err');$('#login-err').textContent='请输入有效的 11 位手机号';return}
+  if(pwd.length<4){toast('密码至少 4 位','err');$('#login-err').textContent='密码至少 4 位';return}
+  const users=getUsers();
+  // 首次登录此手机号：自动创建账号（"登录只为记录数据"）
+  if(!users[phone]) users[phone]={password:pwd,name:phone}; else users[phone].password=pwd;
+  saveUsers(users);
+  login(phone, users[phone].name||phone);
+});
+
+/* ---------- 搜索（TheAudioDB 首选真实数据，无需 Key） ---------- */
+async function searchTracks(q){
+  if(!q) return [];
+  try{
+    const r=await fetch(`https://theaudiodb.com/api/v1/json/2/search.php?s=${encodeURIComponent(q)}`,{headers:{'User-Agent':'Mozilla/5.0'}});
+    const j=await r.json();
+    if(j&&j.artists){const a=j.artists[0];if(a)return [{id:'tad-'+q,title:a.strArtist||q,artist:a.strArtistAlternate||'',album:'',cover:a.strArtistThumb||'',url:''}]}
+  }catch(e){}
+  // 兜底：本地曲库过滤
+  const lq=q.toLowerCase();return LOCAL_SONGS.filter(s=>s.title.toLowerCase().includes(lq)||s.artist.toLowerCase().includes(lq)||(s.album||'').toLowerCase().includes(lq));
+}
+
+/* ---------- 播放器 ---------- */
+const audio=new Audio();audio.preload='metadata';audio.volume=0.8;
+function loadSong(s,autoplay=true){
+  if(!s) return;State.current=s;
+  $('#player').classList.add('show');
+  audio.src=s.url||'';
+  $('#pc-cover').style.background=gradFor(s);$('#pc-cover').innerHTML=s.cover?`<span style="font-size:22px">${s.cover}</span>`:'<i class="fa-solid fa-music"></i>';
+  $('#pc-t').textContent=s.title;$('#pc-a').textContent=s.artist||'未知艺术家';
+  $('#fp-cover').style.background=gradFor(s);$('#fp-cover').innerHTML=s.cover?`<span style="font-size:120px">${s.cover}</span>`:'<i class="fa-solid fa-music"></i>';
+  $('#fp-t').textContent=s.title;$('#fp-a').textContent=s.artist||'未知艺术家';
+  syncFavIcon();
+  if(autoplay){audio.play().then(()=>setPlaying(true)).catch(()=>setPlaying(false))}
+  addRecent(s);if(State.pbMode)pbAddPlay(s);
+}
+function setPlaying(p){State.playing=p;$('#pc-play').className=p?'fa-solid fa-pause':'fa-solid fa-play';$('#fp-play').className=p?'fa-solid fa-pause fp-play':'fa-solid fa-play fp-play'}
+function nextSong(){const a=currentList();if(!a.length)return;let i=a.findIndex(x=>x.id===State.current?.id);i=(i+1)%a.length;loadSong(a[i])}
+function prevSong(){const a=currentList();if(!a.length)return;let i=a.findIndex(x=>x.id===State.current?.id);i=(i-1+a.length)%a.length;loadSong(a[i])}
+function currentList(){return State.songs.length?State.songs:LOCAL_SONGS}
+function addRecent(s){State.recent=[{...s,ts:Date.now()},...State.recent.filter(x=>x.id!==s.id)].slice(0,30);localStorage.setItem('mm_recent',JSON.stringify(State.recent))}
+function toggleFav(){if(!State.current)return;const has=State.favs.some(x=>x.id===State.current.id);if(has){State.favs=State.favs.filter(x=>x.id!==State.current.id);if(State.pbMode)pbDelFav(State.current.id);toast('已取消收藏')}else{State.favs=[{...State.current},...State.favs];if(State.pbMode)pbAddFav(State.current);toast('已加入收藏 ♥','ok')}localStorage.setItem('mm_favs',JSON.stringify(State.favs));syncFavIcon();Router.render()}
+function syncFavIcon(){if(!State.current){$('#fp-like').className='fp-like';return}$('#fp-like').className=State.favs.some(x=>x.id===State.current.id)?'fp-like on':'fp-like';$('#fp-like').innerHTML=State.favs.some(x=>x.id===State.current.id)?'<i class="fa-solid fa-heart"></i>':'<i class="fa-regular fa-heart"></i>'}
+function gradFor(s){const h=Math.abs(hashCode(s.id||s.title||'x'))%360;return `linear-gradient(135deg,hsl(${h},70%,52%),hsl(${(h+40)%360},70%,42%))`}
+function hashCode(str){let h=0;for(let i=0;i<str.length;i++)h=(h<<5)-h+str.charCodeAt(i)|0;return h}
+audio.addEventListener('timeupdate',()=>{$('#pc-cur').textContent=fmt(audio.currentTime);$('#fp-cur').textContent=fmt(audio.currentTime);if(audio.duration){$('#pc-bar').value=Math.floor(audio.currentTime/audio.duration*1000);$('#fp-bar').value=$('#pc-bar').value}});
+audio.addEventListener('loadedmetadata',()=>{$('#pc-dur').textContent=fmt(audio.duration);$('#fp-dur').textContent=fmt(audio.duration)});
+audio.addEventListener('ended',nextSong);
+$('#pc-play').addEventListener('click',()=>{if(!State.current)return audio.paused?audio.play().then(()=>setPlaying(true)):audio.pause()&&setPlaying(false);else audio.paused?(audio.play().then(()=>setPlaying(true))):(audio.pause(),setPlaying(false))});
+$('#pc-prev').addEventListener('click',prevSong);$('#pc-next').addEventListener('click',nextSong);
+$('#pc-cover').addEventListener('click',()=>{$('#full-player').classList.add('show')});
+$('#fp-close').addEventListener('click',()=>$('#full-player').classList.remove('show'));
+$('#fp-play').addEventListener('click',()=>audio.paused?audio.play().then(()=>setPlaying(true)):(audio.pause(),setPlaying(false)));
+$('#fp-prev').addEventListener('click',prevSong);$('#fp-next').addEventListener('click',nextSong);
+$('#fp-like').addEventListener('click',toggleFav);
+$('#pc-bar').addEventListener('input',()=>{if(audio.duration)audio.currentTime=audio.duration*$('#pc-bar').value/1000});
+$('#fp-bar').addEventListener('input',()=>{if(audio.duration)audio.currentTime=audio.duration*$('#fp-bar').value/1000});
+$('#pc-vol').addEventListener('input',()=>audio.volume=$('#pc-vol').value/100);
+document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;if(e.code==='Space'){e.preventDefault();$('#pc-play').click()}if(e.code==='ArrowRight')nextSong();if(e.code==='ArrowLeft')prevSong()});
+
+/* ---------- 分段控制器（点切 + 滑切，glider 用 liquid glass） ---------- */
+const SEG_LABELS=['全部','歌曲','歌手','专辑'];
+function renderSeg(){
+  $$('.seg-btn').forEach(b=>b.classList.toggle('active',+b.dataset.seg===State.seg));
+  const active=$('.seg-btn.active');const wrap=$('#segmented');
+  if(active&&wrap){const r=active.getBoundingClientRect(),wr=wrap.getBoundingClientRect();$('#seg-glider').style.width=r.width+'px';$('#seg-glider').style.transform=`translateX(${r.left-wr.left-3}px)`}
+  $('#page-title').textContent=SEG_LABELS[State.seg]||'主页';
+  Router.render();
+}
+function setSeg(i){if(i<0)i=SEG_LABELS.length-1;if(i>=SEG_LABELS.length)i=0;State.seg=i;renderSeg()}
+$('#segmented').addEventListener('click',e=>{const b=e.target.closest('.seg-btn');if(b)setSeg(+b.dataset.seg)});
+let touchX=0;$('#segmented').addEventListener('touchstart',e=>touchX=e.touches[0].clientX,{passive:true});
+$('#segmented').addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-touchX;if(Math.abs(dx)>30)setSeg(State.seg+(dx<0?1:-1))});
+// 主内容区也可左右滑动切换分段
+let mainTouchX=0;$('#content').addEventListener('touchstart',e=>mainTouchX=e.touches[0].clientX,{passive:true});
+$('#content').addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-mainTouchX;if(Math.abs(dx)>50)setSeg(State.seg+(dx<0?1:-1))});
+
+/* ---------- 路由/页面渲染 ---------- */
+const Router={
+  go(p){State.seg=p==='home'?0:State.seg;if(p==='search')State.seg=1;renderSeg();},
+  render(){
+    const seg=State.seg;const c=$('#content');
+    if(seg===0) return c.innerHTML=renderHome();
+    if(seg===1) return c.innerHTML=renderSongList(State.songs.length?State.songs:LOCAL_SONGS);
+    if(seg===2){const map={};(State.songs.length?State.songs:LOCAL_SONGS).forEach(s=>{map[s.artist]=(map[s.artist]||[]);map[s.artist].push(s)});const arts=Object.keys(map).sort();return c.innerHTML=`<div class="section-title">歌手</div>`+(arts.length?`<div class="grid-3">${arts.map(a=>`<div class="grid-card" data-art="${encodeURIComponent(a)}"><div class="gc-cover" style="background:${gradFor({id:a})}">${a.charAt(0)}</div><div class="gc-t">${a}</div><div class="gc-s">${map[a].length} 首</div></div>`).join('')}</div>`:emptyHTML('暂无歌手'))}
+    if(seg===3){const map={};(State.songs.length?State.songs:LOCAL_SONGS).forEach(s=>{const al=s.album||'未知专辑';map[al]=(map[al]||[]);map[al].push(s)});const als=Object.keys(map).sort();return c.innerHTML=`<div class="section-title">专辑</div>`+(als.length?`<div class="grid-3">${als.map(a=>`<div class="grid-card"><div class="gc-cover" style="background:${gradFor({id:a})}">${map[a][0].cover||'💿'}</div><div class="gc-t">${a}</div><div class="gc-s">${map[a].length} 首</div></div>`).join('')}</div>`:emptyHTML('暂无专辑'))}
+  }
+};
+function emptyHTML(t){return `<div class="empty"><i class="fa-solid fa-music"></i><p>${t}</p></div>`}
+function renderHome(){
+  const songs=State.songs.length?State.songs:LOCAL_SONGS;
+  const cats=['流行','电子','摇滚','古典','爵士','说唱','民谣','舞曲'].map((n,i)=>`<div class="cat-card lg-interactive" style="background:linear-gradient(135deg,${CAT_GRADIENTS[i]},${CAT_GRADIENTS[(i+3)%CAT_GRADIENTS.length]})"><i class="fa-solid fa-${['compact-disc','bolt','guitar','music','microphone-lines','headphones','leaf','star'][i]}"></i>${n}</div>`).join('');
+  const recs=songs.slice(0,8).map(s=>`<div class="rec-card lg-interactive" data-id="${s.id}"><div class="rec-cover" style="background:${gradFor(s)}">${s.cover||'🎵'}</div><div class="rt">${s.title}</div><div class="ra">${s.artist}</div></div>`).join('');
+  const top=songs.slice(0,6).map((s,i)=>`<div class="song-row" data-id="${s.id}"><div class="sc" style="background:${gradFor(s)}">${s.cover||'🎵'}</div><div class="si"><div class="st">${s.title}</div><div class="sa">${s.artist}</div></div><div class="sact"><i class="fa-heart ${State.favs.some(x=>x.id===s.id)?'fa-solid on':'fa-regular'}" style="${State.favs.some(x=>x.id===s.id)?'color:var(--danger)':''}" data-fav="${s.id}"></i><i class="fa-play" data-play="${s.id}"></i></div></div>`).join('');
+  return `<div class="banner lg-materialize"><h2>甜蜜一夏 ¥2.00 畅听 3 个月</h2><p>前 3 个月只需 ¥2.00，之后 ¥12.00/月 · 好音乐，合家享</p></div>
+    <div class="section-title">分类浏览</div><div class="cat-grid">${cats}</div>
+    <div class="section-title">推荐歌单</div><div class="rec-row">${recs}</div>
+    <div class="section-title">热门歌曲</div><div class="song-list">${top}</div>`;
+}
+function renderSongList(songs){
+  if(!songs.length) return emptyHTML('暂无歌曲');
+  return `<div class="song-list">${songs.map(s=>`<div class="song-row" data-id="${s.id}"><div class="sc" style="background:${gradFor(s)}">${s.cover||'🎵'}</div><div class="si"><div class="st">${s.title}</div><div class="sa">${s.artist} · ${s.album||''}</div></div><div class="sact"><i class="fa-heart ${State.favs.some(x=>x.id===s.id)?'fa-solid':'fa-regular'}" style="${State.favs.some(x=>x.id===s.id)?'color:var(--danger)':''}"></i><i class="fa-play"></i></div></div>`).join('')}</div>`;
+}
+function bindSongClicks(){
+  $$('.song-row,.rec-card').forEach(el=>el.addEventListener('click',e=>{const id=el.dataset.id||e.target.closest('[data-id]')?.dataset.id;if(!id)return;const s=(State.songs.length?State.songs:LOCAL_SONGS).find(x=>x.id===id);if(s)loadSong(s)}));
+  $$('[data-fav]').forEach(i=>i.addEventListener('click',e=>{e.stopPropagation();const id=i.dataset.fav;s=(State.songs.length?State.songs:LOCAL_SONGS).find(x=>x.id===id);if(s){State.current=s;toggleFav()}}));
+  $$('[data-play]').forEach(i=>i.addEventListener('click',e=>{e.stopPropagation();const id=i.dataset.play;s=(State.songs.length?State.songs:LOCAL_SONGS).find(x=>x.id===id);if(s)loadSong(s)}));
+}
+const origRender=Router.render;Router.render=function(){origRender();bindSongClicks()}
+
+/* ---------- 搜索框（顶部 + 页面内） ---------- */
+let searchTimer=null;$('#top-search').addEventListener('input',e=>{clearTimeout(searchTimer);const q=e.target.value.trim();if(!q){State.seg=0;renderSeg();return}searchTimer=setTimeout(async()=>{const r=await searchTracks(q);State.songs=r;setSeg(1)},300)});
+$('#top-search').addEventListener('keydown',e=>{if(e.key==='Enter'){$('#top-search').dispatchEvent(new Event('input'))}});
+
+/* ---------- 侧边导航 ---------- */
+$$('.nav-item').forEach(n=>n.addEventListener('click',()=>{$$('.nav-item').forEach(x=>x.classList.remove('active'));n.classList.add('active');const p=n.dataset.page;if(p==='home')setSeg(0);if(p==='search'){$('#top-search').focus();setSeg(1)}if(p==='songs')setSeg(1);if(p==='recent'){State.songs=State.recent;setSeg(1)}if(p==='favorites'){State.songs=State.favs;setSeg(1)}}));
+
+/* ---------- 启动 ---------- */
+window.addEventListener('load',()=>{
+  tryAutoLogin();
+  if(!State.user){$('#login-wrap').style.display='flex';$('#app').style.display='none'}
+  else if(State.current){$('#player').classList.add('show')}
+  renderSeg();
+});
+</script>
+</body>
+</html>
